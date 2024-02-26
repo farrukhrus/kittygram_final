@@ -1,9 +1,6 @@
-name: Main Taski workflow
+name: Main Kittygram workflow
 
-on:
-  push:
-    branches:
-      - main
+on: push
 
 jobs:
   tests:
@@ -12,9 +9,9 @@ jobs:
       postgres:
         image: postgres:13.10
         env:
-          POSTGRES_USER: django_user
-          POSTGRES_PASSWORD: django_password
-          POSTGRES_DB: django_db
+          POSTGRES_USER: kittygram_user
+          POSTGRES_PASSWORD: kittygram_password
+          POSTGRES_DB: kittygram
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
@@ -24,34 +21,34 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: 3.9
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip 
         pip install flake8==6.0.0 flake8-isort==6.0.0
-        pip install -r ./backend/requirements.txt 
+        pip install -r ./backend/requirements.txt
     - name: Test with flake8 and django tests
       env:
-        POSTGRES_USER: django_user
-        POSTGRES_PASSWORD: django_password
-        POSTGRES_DB: django_db
+        POSTGRES_USER: kittygram_user
+        POSTGRES_PASSWORD: kittygram_password
+        POSTGRES_DB: kittygram
         DB_HOST: 127.0.0.1
         DB_PORT: 5432
       run: |
-        python -m flake8 backend/
+        python -m flake8
         cd backend/
         python manage.py test
-
+  
   build_and_push_to_docker_hub:
     name: Push Docker image to DockerHub
     runs-on: ubuntu-latest
     needs: tests
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Check out the repo
         uses: actions/checkout@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Login to Docker 
+      - name: Login to Docker
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -61,8 +58,8 @@ jobs:
         with:
           context: ./backend/
           push: true
-          tags: farrukhrus/kittygram_backend:latest 
-  
+          tags: ${{ secrets.DOCKER_USERNAME }}/kittygram_backend:latest
+
   frontend_tests:
     runs-on: ubuntu-latest
 
@@ -86,12 +83,13 @@ jobs:
     name: Push frontend Docker image to DockerHub
     runs-on: ubuntu-latest
     needs: frontend_tests
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Check out the repo
         uses: actions/checkout@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Login to Docker 
+      - name: Login to Docker
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -101,17 +99,18 @@ jobs:
         with:
           context: ./frontend/
           push: true
-          tags: farrukhrus/kittygram_frontend:latest
-
+          tags: ${{ secrets.DOCKER_USERNAME }}/kittygram_frontend:latest
+  
   build_gateway_and_push_to_docker_hub:
     name: Push gateway Docker image to DockerHub
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Check out the repo
         uses: actions/checkout@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Login to Docker 
+      - name: Login to Docker
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -121,14 +120,15 @@ jobs:
         with:
           context: ./nginx/
           push: true
-          tags: farrukhrus/kittygram_gateway:latest
-
+          tags: ${{ secrets.DOCKER_USERNAME }}/kittygram_gateway:latest
+  
   deploy:
     runs-on: ubuntu-latest
-    needs: 
+    needs:
       - build_and_push_to_docker_hub
       - build_frontend_and_push_to_docker_hub
       - build_gateway_and_push_to_docker_hub
+    if: github.ref == 'refs/heads/main'
     steps:
     - name: Checkout repo
       uses: actions/checkout@v3
@@ -156,14 +156,33 @@ jobs:
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py migrate
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic
           sudo docker compose -f docker-compose.production.yml exec backend cp -r /app/collected_static/. /backend_static/static/
-
   send_message:
     runs-on: ubuntu-latest
     needs: deploy
+    if: github.ref == 'refs/heads/main'
     steps:
+    - name: Set up Git
+      run: git fetch --no-tags --prune --depth=1 origin +refs/heads/main
+    - name: Get commit message and author
+      run: |
+        COMMIT_MESSAGE=$(git log --format=%B -n 1 ${{ github.sha }})
+        COMMIT_AUTHOR=$(git log --format=%an -n 1 ${{ github.sha }})
+        COMMIT_LINK=https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+        echo "::set-env name=COMMIT_MESSAGE::$COMMIT_MESSAGE"
+        echo "::set-env name=COMMIT_AUTHOR::$COMMIT_AUTHOR"
+        echo "::set-env name=COMMIT_LINK::$COMMIT_LINK"
     - name: Send message
       uses: appleboy/telegram-action@master
       with:
         to: ${{ secrets.TELEGRAM_TO }}
         token: ${{ secrets.TELEGRAM_TOKEN }}
-        message: Деплой kittygram успешно выполнен!
+        message: |
+          Деплой успешно выполнен!
+          Push от: ${{ github.actor }}
+          Сообщение коммита: ${{ env.COMMIT_MESSAGE }}
+          Автор коммита: ${{ env.COMMIT_AUTHOR }}
+          [Ссылка на коммит](${{ env.COMMIT_LINK }})
+      env:
+        COMMIT_MESSAGE: ${{ env.COMMIT_MESSAGE }}
+        COMMIT_AUTHOR: ${{ env.COMMIT_AUTHOR }}
+        COMMIT_LINK: ${{ env.COMMIT_LINK }}

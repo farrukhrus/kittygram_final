@@ -1,5 +1,4 @@
 # flake8: noqa
-from django.core.management.utils import get_random_secret_key
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -8,9 +7,9 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('SECRET_KEY', default=get_random_secret_key())
+SECRET_KEY = 'django-insecure-cg6*%6d51ef8f#4!r3*$vmxm4)abgjw8mo!4y-q*uq1!4$-89$'
 
-DEBUG = os.getenv('DEBUG', default='False').lower() == 'true'
+DEBUG = True
 
 ALLOWED_HOSTS = []
 

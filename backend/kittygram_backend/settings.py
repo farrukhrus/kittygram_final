@@ -11,13 +11,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY', default=get_random_secret_key())
-f = open('demofile3.txt', 'w')
-f.write(SECRET_KEY)
 
 DEBUG = os.getenv('DEBUG', default='False').lower() == 'true'
-
-f.write(DEBUG)
-f.close()
 
 ALLOWED_HOSTS = []
 
